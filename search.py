@@ -4,15 +4,15 @@ import re
 import sys
 
 
-def get_snippet(body_text, query):
+def get_snippet(body_text, query, context=100):
     lower_body = body_text.lower()
     lower_query = query.lower()
     index = lower_body.find(lower_query)
     if index == -1:
         return ""
 
-    start = max(0, index - 100)
-    end = min(len(body_text), index + len(query) + 100)
+    start = max(0, index - context)
+    end = min(len(body_text), index + len(query) + context)
     snippet = body_text[start:end].strip()
     return snippet[:200] if len(snippet) > 200 else snippet
 

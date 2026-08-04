@@ -94,7 +94,35 @@ def filter_links(links, seed_url, visited):
     return filtered
 
 
-def crawl(seed_url, max_depth, max_pages, output_path):
+def fetch_page(url, session=None):
+    """Fetch a single page and return page data dict, or None on failure."""
+    if session is None:
+        session = requests.Session()
+        session.headers["User-Agent"] = "WebCrawlerCLI/1.0"
+        close_session = True
+    else:
+        close_session = False
+
+    try:
+        time.sleep(0.1)
+        response = session.get(url, timeout=10)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Warning: Failed to fetch {url}: {e}", file=sys.stderr)
+        if close_session:
+            session.close()
+        return None
+
+    page_data = extract_page(url, response.text)
+
+    if close_session:
+        session.close()
+
+    return page_data
+
+
+def crawl_from_seed(seed_url, depth=1, max_pages=3):
+    """BFS crawl from a seed URL. Returns list of page dicts."""
     visited = set()
     results = []
     queue = deque([(seed_url, 0)])
@@ -102,18 +130,17 @@ def crawl(seed_url, max_depth, max_pages, output_path):
     session.headers["User-Agent"] = "WebCrawlerCLI/1.0"
 
     while queue and len(visited) < max_pages:
-        url, depth = queue.popleft()
+        url, d = queue.popleft()
 
         if url in visited:
             continue
-        if depth > max_depth:
+        if d > depth:
             continue
 
         visited.add(url)
 
-        time.sleep(0.1)
-
         try:
+            time.sleep(0.1)
             response = session.get(url, timeout=10)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
@@ -125,7 +152,14 @@ def crawl(seed_url, max_depth, max_pages, output_path):
 
         new_links = filter_links(page_data["links"], seed_url, visited)
         for link in new_links:
-            queue.append((link, depth + 1))
+            queue.append((link, d + 1))
+
+    session.close()
+    return results
+
+
+def crawl(seed_url, max_depth, max_pages, output_path):
+    results = crawl_from_seed(seed_url, depth=max_depth, max_pages=max_pages)
 
     try:
         with open(output_path, "w") as f:
