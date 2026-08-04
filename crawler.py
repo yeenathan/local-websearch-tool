@@ -3,6 +3,7 @@ import json
 import sys
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -15,6 +16,7 @@ def parse_args():
     parser.add_argument("--depth", type=int, default=2, help="Max recursion depth")
     parser.add_argument("--max-pages", type=int, default=20, help="Max pages per domain")
     parser.add_argument("--output", default="results.json", help="Output JSON file path")
+    parser.add_argument("--workers", type=int, default=4, help="Max concurrent fetch threads")
     return parser.parse_args()
 
 
@@ -104,7 +106,7 @@ def fetch_page(url, session=None):
         close_session = False
 
     try:
-        time.sleep(0.1)
+        time.sleep(0.025)
         response = session.get(url, timeout=10)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
@@ -121,8 +123,8 @@ def fetch_page(url, session=None):
     return page_data
 
 
-def crawl_from_seed(seed_url, depth=1, max_pages=3):
-    """BFS crawl from a seed URL. Returns list of page dicts."""
+def crawl_from_seed(seed_url, depth=1, max_pages=3, workers=4):
+    """BFS crawl from a seed URL using ThreadPoolExecutor. Returns list of page dicts."""
     visited = set()
     results = []
     queue = deque([(seed_url, 0)])
@@ -130,36 +132,55 @@ def crawl_from_seed(seed_url, depth=1, max_pages=3):
     session.headers["User-Agent"] = "WebCrawlerCLI/1.0"
 
     while queue and len(visited) < max_pages:
-        url, d = queue.popleft()
+        current_level = []
+        next_level = deque()
 
-        if url in visited:
-            continue
-        if d > depth:
-            continue
+        while queue:
+            url, d = queue.popleft()
 
-        visited.add(url)
+            if d > depth:
+                continue
+            if url in visited:
+                continue
+            if len(visited) >= max_pages:
+                queue.appendleft((url, d))
+                break
 
-        try:
-            time.sleep(0.1)
-            response = session.get(url, timeout=10)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            print(f"Warning: Failed to fetch {url}: {e}", file=sys.stderr)
-            continue
+            visited.add(url)
+            current_level.append((url, d))
 
-        page_data = extract_page(url, response.text)
-        results.append(page_data)
+        if not current_level:
+            break
 
-        new_links = filter_links(page_data["links"], seed_url, visited)
-        for link in new_links:
-            queue.append((link, d + 1))
+        def fetch_task(url):
+            return fetch_page(url, session)
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_to_url = {executor.submit(fetch_task, url): url for url, _ in current_level}
+
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    page_data = future.result()
+                except Exception as e:
+                    print(f"Warning: Failed to fetch {url}: {e}", file=sys.stderr)
+                    continue
+
+                if page_data is not None:
+                    results.append(page_data)
+                    new_links = filter_links(page_data["links"], seed_url, visited)
+                    current_depth = next(d for u, d in current_level if u == url)
+                    for link in new_links:
+                        next_level.append((link, current_depth + 1))
+
+        queue.extend(next_level)
 
     session.close()
     return results
 
 
-def crawl(seed_url, max_depth, max_pages, output_path):
-    results = crawl_from_seed(seed_url, depth=max_depth, max_pages=max_pages)
+def crawl(seed_url, max_depth, max_pages, output_path, workers=4):
+    results = crawl_from_seed(seed_url, depth=max_depth, max_pages=max_pages, workers=workers)
 
     try:
         with open(output_path, "w") as f:
@@ -171,7 +192,7 @@ def crawl(seed_url, max_depth, max_pages, output_path):
 
 def main():
     args = parse_args()
-    crawl(args.url, args.depth, args.max_pages, args.output)
+    crawl(args.url, args.depth, args.max_pages, args.output, args.workers)
 
 
 if __name__ == "__main__":
