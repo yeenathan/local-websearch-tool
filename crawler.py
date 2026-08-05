@@ -59,6 +59,7 @@ def filter_links(links, seed_url, visited):
     seed_parsed = urlparse(seed_url)
     seed_scheme = seed_parsed.scheme
     seed_domain = seed_parsed.netloc
+    seed_path = seed_parsed.path
 
     filtered = []
     exclude_prefixes = (
@@ -71,6 +72,13 @@ def filter_links(links, seed_url, visited):
         "User:",
     )
 
+    # Detect wiki-style path prefix
+    wiki_prefix = None
+    for prefix in ("/wiki/", "/title/"):
+        if prefix in seed_path:
+            wiki_prefix = prefix
+            break
+
     for link in links:
         parsed = urlparse(link)
 
@@ -79,12 +87,14 @@ def filter_links(links, seed_url, visited):
 
         path = parsed.path
 
-        if seed_domain.endswith("wikipedia.org"):
-            if "/wiki/" not in path:
+        # If seed is on a wiki/title path, only follow same-type links
+        if wiki_prefix is not None:
+            if wiki_prefix not in path:
                 continue
 
-            path_prefix = path.split("/wiki/")[1].split("/")[0]
-            if any(path_prefix.startswith(p) for p in exclude_prefixes):
+            # Apply namespace prefix exclusions for any wiki-style path
+            page_name = path.split(wiki_prefix)[1].split("/")[0]
+            if any(page_name.startswith(p) for p in exclude_prefixes):
                 continue
 
         if "#" in link:
@@ -94,7 +104,6 @@ def filter_links(links, seed_url, visited):
             filtered.append(link)
 
     return filtered
-
 
 def fetch_page(url, session=None):
     """Fetch a single page and return page data dict, or None on failure."""

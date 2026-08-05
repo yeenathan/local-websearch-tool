@@ -6,30 +6,48 @@ import sys
 
 def get_snippet(body_text, query, context=100):
     lower_body = body_text.lower()
-    lower_query = query.lower()
-    index = lower_body.find(lower_query)
-    if index == -1:
+    query_words = query.lower().split()
+    if not query_words:
+        return ""
+
+    # Find the first occurrence of any query word
+    index = None
+    matched_word_len = 0
+    for w in query_words:
+        pos = lower_body.find(w)
+        if pos != -1 and (index is None or pos < index):
+            index = pos
+            matched_word_len = len(w)
+
+    if index is None:
         return ""
 
     start = max(0, index - context)
-    end = min(len(body_text), index + len(query) + context)
+    end = min(len(body_text), index + matched_word_len + context)
     snippet = body_text[start:end].strip()
     return snippet[:200] if len(snippet) > 200 else snippet
 
 
 def score_page(page, query):
     score = 0
-    lower_query = query.lower()
+    query_words = query.lower().split()
+    if not query_words:
+        return 0
 
+    # Title: +10 if ANY query word appears in title
     title = page.get("title", "").lower()
-    if lower_query in title:
+    if any(w in title for w in query_words):
         score += 10
 
+    # Body: +1 per occurrence of each query word
     body_text = page.get("body_text", "")
-    score += len(re.findall(re.escape(lower_query), body_text.lower()))
+    body_lower = body_text.lower()
+    for w in query_words:
+        score += len(re.findall(re.escape(w), body_lower))
 
+    # Headings: +2 if ANY query word appears in heading
     for heading in page.get("headings", []):
-        if lower_query in heading.get("text", "").lower():
+        if any(w in heading.get("text", "").lower() for w in query_words):
             score += 2
 
     return score

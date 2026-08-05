@@ -12,7 +12,7 @@ import search
 def parse_args():
     parser = argparse.ArgumentParser(description="Search API server")
     parser.add_argument("--include-body-text", action="store_true", help="Include body_text in responses")
-    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
+    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     return parser.parse_args()
 
@@ -52,7 +52,7 @@ def search_endpoint(
     # Step 2: Crawl each URL (shallow crawl, depth 1)
     all_pages = []
     for result in ddg_results:
-        pages = crawler.crawl_from_seed(result["url"], depth=1, max_pages=3)
+        pages = crawler.crawl_from_seed(result["url"], depth=2, max_pages=10)
         all_pages.extend(pages)
 
     crawled_pages = len(all_pages)
