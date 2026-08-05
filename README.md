@@ -2,7 +2,7 @@
 
 A local HTTP search API that crawls the web and returns ranked results with a json response.
 
-**DISCLAIMER:** Almost completely written with a Q4 quant of Qwen 3.6-27B. This is a personal experiment and exercise with AI agentic workflows
+**DISCLAIMER:** Almost completely written with a Q4 quant of Qwen 3.6-27B. This is a personal experiment and exercise with AI agentic workflows. And I didn't want to enter my card for search api credits
 
 ## How It Works
 
