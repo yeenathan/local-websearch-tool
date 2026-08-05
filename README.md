@@ -1,4 +1,4 @@
-# Local Search API
+# Local Web Search Tool
 
 A local HTTP search API that crawls the web and returns ranked results with a json response.
 
